@@ -11,6 +11,7 @@
 #include "../mesh/generated/meshtastic/paxcount.pb.h"
 #endif
 #include "mesh/generated/meshtastic/remote_hardware.pb.h"
+
 #include <sys/types.h>
 
 std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp, bool shouldLog)
@@ -290,7 +291,37 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
             }
             break;
         }
+
         // add more packet types here if needed
+
+        case meshtastic_PortNum_PRIVATE_APP:{
+            msgType = "i2cdata";
+            // convert bytes to string
+            if (shouldLog)
+                LOG_DEBUG("got text message of size %u", mp->decoded.payload.size);
+
+            char payloadStr[(mp->decoded.payload.size) + 1];
+            memcpy(payloadStr, mp->decoded.payload.bytes, mp->decoded.payload.size);
+            payloadStr[mp->decoded.payload.size] = 0; // null terminated string
+            // check if this is a JSON payload
+            JSONValue *json_value = JSON::Parse(payloadStr);
+            if (json_value != NULL) {
+                if (shouldLog)
+                    LOG_INFO("text message payload is of type json");
+
+                // if it is, then we can just use the json object
+                jsonObj["payload"] = json_value;
+            } else {
+                // if it isn't, then we need to create a json object
+                // with the string as the value
+                if (shouldLog)
+                    LOG_INFO("text message payload is of type plaintext");
+
+                msgPayload["Read"] = new JSONValue(payloadStr);
+                jsonObj["payload"] = new JSONValue(msgPayload);
+            }
+        }
+        
         default:
             break;
         }
